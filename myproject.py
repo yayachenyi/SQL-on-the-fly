@@ -1,16 +1,25 @@
-
 import pandas as pd
+pd.options.mode.chained_assignment = None
+import json
 import sqlparse
+import itertools
+import ast
+import bisect
+import copy
 import sys, time, re
+from multiprocessing import Pool
+from condition import Condition, CompCondition
 
 def index(segments, tables):
-    key = segments[1].split('/')[-1][:-4]
-    df = pd.read_csv(segments[1])
-    df.columns = df.columns.str.lower()
-    tables[key] = df
+    key = segments[1]
+    with open('index/' + key + '_index_hash_dict', 'r') as f:
+        hash_dict = json.load(f)
+    with open('index/' + key + '_index_row_numbers', 'r') as f:
+        row_numbers = json.load(f)
+    tables[key] = (hash_dict, row_numbers)
 
 def drop(segments, tables):
-    key = segments[1].split('/')[-1][:-4]
+    key = segments[1]
     tables.pop(key)
 
 def parse(line):
@@ -21,11 +30,11 @@ def generalhandler(command):
     parsedlist = parsedcommand.split("\n")
     i = 0
     selectcommand = ''
-    while "from" not in parsedlist[i]:
+    while "FROM" not in parsedlist[i]:
         selectcommand+=parsedlist[i]
         i+=1
     fromcommand = ''
-    while i<len(parsedlist) and ("where" not in parsedlist[i]):
+    while i<len(parsedlist) and ("WHERE" not in parsedlist[i]):
         fromcommand+=parsedlist[i]
         i+=1
     wherecommand=''
@@ -33,118 +42,261 @@ def generalhandler(command):
         wherecommand+=parsedlist[i]
         i+=1
     commands = {}
-    commands['select'] = selectcommand.split('select ')[1]
-    commands['from'] = fromcommand.split('from ')[1]
+    commands["SELECT"] = selectcommand.split("SELECT ")[1]
+    commands["FROM"] = fromcommand.split("FROM ")[1]
     if wherecommand == '':
-        commands['where'] = ''
+        commands["WHERE"] = ''
     else:
-        commands['where'] = wherecommand.split('where ')[1]
+        commands["WHERE"] = wherecommand.split("WHERE ")[1]
     return commands
 
-def fromParser(tables, command):
-    query = command.split(' on ')
+def fromParser(command):
+    abb2table = {}
+    table_init = []
+    query = re.split(r'\s*,\s*', command)
     if len(query) > 1:
-        tbs = re.split(r',\s+', query[0])
-        cds = re.split(r'and\s+', query[1])
-        assert len(tbs)>1, 'Please input at least two tables with ON condition'
-        dfs = {}
-        for t in tbs:
-            dfs[t.split(' ')[1]] = tables[t.split(' ')[0]].copy()
-            dfs[t.split(' ')[1]].columns = [t.split(' ')[1]+'__'+i for i in dfs[t.split(' ')[1]].columns]
-        temp = re.split(r'\s+=\s+', cds[0])
-        dfs[temp[0].split('__')[0]]['merge_key'] = dfs[temp[0].split('__')[0]][temp[0]]
-        dfs[temp[1].split('__')[0]]['merge_key'] = dfs[temp[1].split('__')[0]][temp[1]]
-        ret = pd.merge(dfs[temp[0].split('__')[0]], dfs[temp[1].split('__')[0]], on = 'merge_key')
-        if len(cds) > 1:
-            for idx in range(1, len(cds)):
-                temp = re.split(r'\s+=\s+', cds[idx])
-                ret['merge_key'] = ret[temp[0]]
-                dfs[temp[1].split('__')[0]]['merge_key'] = dfs[temp[1].split('__')[0]][temp[1]]
-                ret = pd.merge(ret, dfs[temp[1].split('__')[0]], on = 'merge_key')
-        return ret.drop('merge_key', 1)
+        for q in query:
+            tbs = re.split(r'\s+', q)
+            abb2table[tbs[-1]] = tbs[0]
     else:
-        query = re.split(r',\s+', command)
-        assert len(query)==1, 'Please input: ON table1.key=table2.key'
-        return tables[command]
+        tbs = re.split(r'\s+', query[0])
+        assert len(tbs) == 1, 'No abbreviations for single table'
+        abb2table[tbs[0]] = tbs[0]
+    table_num = len(query)
+    return abb2table, table_num
 
-def nothandler(notcodition):
-    if ' not ' in notcodition:
-        if " >= " in notcodition:
-            notcodition = notcodition.replace(" >= "," < ").replace(' not ','')
-        elif " <= " in notcodition:
-            notcodition = notcodition.replace(" <= "," > ").replace(' not ','')
-        elif " <> " in notcodition:
-            notcodition = notcodition.replace(" <> "," == ").replace(' not ','')
-        elif " = " in notcodition:
-            notcodition = notcodition.replace(" = "," != ").replace(' not ','')
-        elif " < " in notcodition:
-            notcodition = notcodition.replace(" < "," >= ").replace(' not ','')
-        elif " > " in notcodition:
-            notcodition = notcodition.replace(" > "," <= ").replace(' not ','')
+def condsplit(condition):
+    ret = []
+    if ' OR ' in condition:
+        ret = condition.split(' OR ')
+    else:
+        assert False, 'Wrong conjuction word'
+    return ret
+
+def whereParser(command):
+    ret = []
+    if command == '':
+        return ret
+    conds = re.split(r'\s*AND\s*', command)
+    for c in conds:
+        if c[0] == '(' and c[-1] == ')':
+            ret.append(CompCondition(c[1:-1]))
         else:
-            print "Cannot perform NOT operation"
+            ret.append(Condition(c))
+    return ret
+
+def getRowNumbersSingleTable(tables, table, cond):
+    key = cond.right
+    attr = cond.left
+    keyl = tables[table][0][attr]
+    if cond.op != 'LIKE':
+        key = cond.right
+        attr = cond.left
+        if key in keyl:
+            idx = keyl[key]
+            if cond.op == '==':
+                row_numbers = tables[table][1][attr][idx]
+            elif cond.op == '!=':
+                temp = tables[table][1][attr][:idx] + tables[table][1][attr][idx+1:]
+                row_numbers = [item for sublist in temp for item in sublist]
+            elif cond.op == '>=':
+                temp = tables[table][1][attr][idx:]
+                row_numbers = [item for sublist in temp for item in sublist]
+            elif cond.op == '<=':
+                temp = tables[table][1][attr][:idx+1]
+                row_numbers = [item for sublist in temp for item in sublist]
+            elif cond.op == '>':
+                temp = tables[table][1][attr][idx+1:]
+                row_numbers = [item for sublist in temp for item in sublist]
+            elif cond.op == '<':
+                temp = tables[table][1][attr][:idx]
+                row_numbers = [item for sublist in temp for item in sublist]
+        else:
+            idx = bisect.bisect(keyl.keys(), key)
+            if cond.op == '==':
+                row_numbers = []
+            elif cond.op == '!=':
+                row_numbers = -1
+            elif cond.op == '>=':
+                temp = tables[table][1][attr][idx:]
+                row_numbers = [item for sublist in temp for item in sublist]
+            elif cond.op == '<=':
+                temp = tables[table][1][attr][:idx]
+                row_numbers = [item for sublist in temp for item in sublist]
+            elif cond.op == '>':
+                temp = tables[table][1][attr][idx:]
+                row_numbers = [item for sublist in temp for item in sublist]
+            elif cond.op == '<':
+                temp = tables[table][1][attr][:idx]
+                row_numbers = [item for sublist in temp for item in sublist]
     else:
-        if (" <= " not in notcodition) and (" >= " not in notcodition) and (" = " in notcodition):
-            notcodition = notcodition.replace(" = "," == ")
-        elif " <> " in notcodition:
-            notcodition = notcodition.replace(" <> "," != ")
-        elif " like " in notcodition:
-            var = notcodition.split(" like ")
-            var[1] = var[1].replace('%', '.*')
-            var[1] = var[1].replace('_', '.')
-            var[1] = "'^" + var[1][1:-1] + "$'"
-            notcodition = var[0] + ".str.lower().str.match(" + var[1] +") == True"
-    return notcodition
+        row_numbers = []
+        for k in keyl:
+            if re.match(cond.right[2:-2], k):
+                idx = keyl[k]
+                row_numbers += tables[table][1][attr][idx]
+    return set(row_numbers)
 
-def commandParser(command):
-    res = []
-    chunkcommand = command.split(" or ")
-    for i in range(0,len(chunkcommand)):
-        temp = []
-        raw = chunkcommand[i].split(" and ")
-        for smallchunck in raw:
-            temp.append(nothandler(smallchunck))
-        res.append(temp)
-    return res
+def getTable(table, row_numbers, test_files):
+    # Given a table name and a row_numbers list, return a pandas datafram.
+    return test_files[table].loc[row_numbers,]
 
-def whereParser(table, command):
-    if command[0][0] == '':
-        return table
-    T = table
-    ors = []
-    megacommand = ""
-    for ans in command:
-        ans_T = []
-        for i in ans:
-            segs = i.rstrip().split(' ')
-            assert len(segs)>2, 'WHERE condition: cond1 op cond2'
-            if segs[0][0] == "(":
-                segs[0] = '((T.'+segs[0].replace("(","")
+def singleTableJoin(tables, abb2table, whereConds, test_files):
+    table = abb2table.keys()[0]
+    if whereConds == []:
+        table_init = pd.read_csv(table+'.csv')
+        return table_init, whereConds
+    row_numbers = -1
+    idx = 0
+    for cond in whereConds:
+        if cond.type != 'S':
+            break
+        else:
+            idx += 1
+            if row_numbers == -1:
+                row_numbers = getRowNumbersSingleTable(tables, table, cond)
             else:
-                segs[0] = '(T.'+segs[0]
-            if segs[2] in T.columns:
-                segs[2] = 'T.'+segs[2]
-            ans_T.append(' '.join(segs) + ')')
-        var =  ' & '.join(ans_T)
-        if megacommand == "":
-            megacommand+=var
+                row_numbers = row_numbers & getRowNumbersSingleTable(tables, table, cond)
+    if row_numbers == -1:
+        table_init = pd.read_csv(table+'.csv')
+    else:
+        table_init = getTable(table+'.csv', list(row_numbers), test_files)
+    return table_init, whereConds[idx:]
+
+def multiTableJoin(tables, table_num, abb2table, whereConds, test_files):
+    row_numbers = {k:-1 for k in abb2table.values()}
+    idx = 0
+    for cond in whereConds:
+        if cond.type != 'S':
+            break
         else:
-            megacommand+= ("| " + var)
-    varr = "((m__imdb_score < 7) | (m__imdb_score >= 7)) & (a__ceremony > 1)"
-    return T.query(megacommand.replace("T.",""))
+            idx += 1
+            table = abb2table[cond.left.split('__')[0]]
+            cond.left = cond.left.split('__')[1]
+            if row_numbers[table] == -1:
+                row_numbers[table] = getRowNumbersSingleTable(tables, table, cond)
+            else:
+                row_numbers[table] = row_numbers[table] & getRowNumbersSingleTable(tables, table, cond)
+
+    for t in abb2table:
+        table = abb2table[t]
+        if row_numbers[table] != -1:
+            row_numbers[table] = getTable(table+'.csv', list(row_numbers[table]), test_files)
+            row_numbers[table].columns = [t+'__'+i for i in row_numbers[table].columns]
+
+    for cidx in range(idx, idx+table_num-1):
+        cond = whereConds[cidx]
+        table1 = abb2table[cond.left.split('__')[0]]
+        table2 = abb2table[cond.right.split('__')[0]]
+        attr1 = cond.left.split('__')[1]
+        attr2 = cond.right.split('__')[1]
+        keys1 = tables[table1][0][attr1].keys()
+        keys2 = tables[table2][0][attr2].keys()
+        keys  = set(keys1) & set(keys2)
+
+        if type(row_numbers[table1]) != int:
+            keys = set(list(row_numbers[table1][cond.left])) & keys
+            if type(row_numbers[table2]) != int:
+                keys = set(list(row_numbers[table2][cond.right])) & keys
+                data1 = row_numbers[table1][row_numbers[table1][cond.left].isin(list(keys))]
+                data2 = row_numbers[table2][row_numbers[table2][cond.right].isin(list(keys))]
+                data1['merge_key'] = data1[cond.left]
+                data2['merge_key'] = data2[cond.right]
+                data = pd.merge(data1, data2, on = 'merge_key')
+                row_numbers[table1] = data
+                row_numbers[table2] = data
+            else:
+                idx_list = [tables[table2][0][attr2][i] for i in keys]
+                row_numbers[table2] = [tables[table2][1][attr2][j] for j in idx_list]
+                row_numbers[table2] = [r for sublist in row_numbers[table2] for r in sublist]
+                row_numbers[table2] = getTable(table2+'.csv', list(row_numbers[table2]), test_files)
+                row_numbers[table2].columns = [cond.right.split('__')[0]+'__'+i for i in row_numbers[table2].columns]
+                data1 = row_numbers[table1][row_numbers[table1][cond.left].isin(list(keys))]
+                data2 = row_numbers[table2][row_numbers[table2][cond.right].isin(list(keys))]
+                data1['merge_key'] = data1[cond.left]
+                data2['merge_key'] = data2[cond.right]
+                data = pd.merge(data1, data2, on = 'merge_key')
+                row_numbers[table1] = data
+                row_numbers[table2] = data
+        else:
+            if type(row_numbers[table2]) != int:
+                keys = set(list(row_numbers[table2][cond.right])) & keys
+                idx_list = [tables[table1][0][attr1][i] for i in keys]
+                row_numbers[table1] = [tables[table1][1][attr1][j] for j in idx_list]
+                row_numbers[table1] = [r for sublist in row_numbers[table1] for r in sublist]
+                row_numbers[table1] = getTable(table1+'.csv', list(row_numbers[table1]), test_files)
+                row_numbers[table1].columns = [cond.left.split('__')[0]+'__'+i for i in row_numbers[table1].columns]
+                data1 = row_numbers[table1][row_numbers[table1][cond.left].isin(list(keys))]
+                data2 = row_numbers[table2][row_numbers[table2][cond.right].isin(list(keys))]
+                data1['merge_key'] = data1[cond.left]
+                data2['merge_key'] = data2[cond.right]
+                data = pd.merge(data1, data2, on = 'merge_key')
+                row_numbers[table1] = data
+                row_numbers[table2] = data
+            else:
+                idx_list = [tables[table1][0][attr1][i] for i in keys]
+                row_numbers[table1] = [tables[table1][1][attr1][j] for j in idx_list]
+                row_numbers[table1] = [r for sublist in row_numbers[table1] for r in sublist]
+                row_numbers[table1] = getTable(table1+'.csv', list(row_numbers[table1]), test_files)
+                row_numbers[table1].columns = [cond.left.split('__')[0]+'__'+i for i in row_numbers[table1].columns]
+                idx_list = [tables[table2][0][attr2][i] for i in keys]
+                row_numbers[table2] = [tables[table2][1][attr2][j] for j in idx_list]
+                row_numbers[table2] = [r for sublist in row_numbers[table2] for r in sublist]
+                row_numbers[table2] = getTable(table2+'.csv', list(row_numbers[table2]), test_files)
+                row_numbers[table2].columns = [cond.right.split('__')[0]+'__'+i for i in row_numbers[table2].columns]
+                data1 = row_numbers[table1][row_numbers[table1][cond.left].isin(list(keys))]
+                data2 = row_numbers[table2][row_numbers[table2][cond.right].isin(list(keys))]
+                data1['merge_key'] = data1[cond.left]
+                data2['merge_key'] = data2[cond.right]
+                data = pd.merge(data1, data2, on = 'merge_key')
+                row_numbers[table1] = data
+                row_numbers[table2] = data
+    return data.drop('merge_key', 1), whereConds[cidx+1:]
+
+def tableFilter(table, leftConds):
+    T = table
+    metaconds = []
+    for cond in leftConds:
+        if cond.type == 'C':
+            temp = []
+            for c in cond.conditions:
+                if c.type == 'M':
+                    temp.append('(T.' + c.left + c.op + 'T.' + c.right + ')')
+                else:
+                    temp.append('(T.' + c.left + c.op + c.right + ')')
+            metaconds.append('(' + ' | '.join(temp) + ')')
+        elif cond.type == 'M':
+            metaconds.append('(T.' + cond.left + cond.op + 'T.' + cond.right + ')')
+        else:
+            metaconds.append('(T.' + cond.left + cond.op + cond.right + ')')
+    metacond = ' & '.join(metaconds)
+    return table[eval(metacond)]
 
 def selectParser(table, command):
     if command == '*':
         return table
     else:
-        query = re.split(r',\s+', command)
-        return table[query]
+        query = re.split(r'\s*,\s*', command)
+        if re.split(r'\s+', query[0])[0] == 'DISTINCT':
+            query[0] = re.split(r'\s+', query[0])[1]
+            if query[0] == '*':
+                return table.drop_duplicates()
+            else:
+                return table[query].drop_duplicates()
+        else:
+            return table[query]
 
 
 def main():
+    files = ['review-1m.csv', 'photos.csv', 'checkin.csv', 'business.csv']
+    test_files = {}
+    for f in files:
+        test_files[f] = pd.read_csv(f)
+    print 'Test files loaded successfully'
+
     tables = {}
     while True:
-        line = sys.stdin.readline().strip('\n').lower()
+        line = sys.stdin.readline().strip('\n')
 
         start = time.time()
 
@@ -155,22 +307,29 @@ def main():
             continue
 
         segments = line.split(' ')
-        if segments[0]== 'use':
+        if segments[0]== 'USE':
             # Table indexing
             index(segments, tables)
-        elif segments[0] == 'drop':
+            print 'Index loaded successfully!'
+        elif segments[0] == 'DROP':
             # Table dropping
             drop(segments, tables)
+            print 'Index dropped successfully!'
         else:
-            # Query parsing and table querying
             commands = generalhandler(line)
-            table_init = fromParser(tables, commands['from'])
-            command_parsed = commandParser(commands['where'])
-            table_filter = whereParser(table_init, command_parsed)
-            table_select = selectParser(table_filter, commands['select'])
-            table_select = table_select.reset_index(drop=True)
+            abb2table, table_num = fromParser(commands['FROM'])
+            whereConds = whereParser(commands['WHERE'])
+            if table_num == 1:
+                table_init, leftConds = singleTableJoin(tables, abb2table, whereConds, test_files)
+            else:
+                table_init, leftConds = multiTableJoin(tables, table_num, abb2table, whereConds, test_files)
+            if leftConds == []:
+                table_filter = table_init
+            else:
+                table_filter = tableFilter(table_init, leftConds)
+            table_select = selectParser(table_filter, commands['SELECT'])
+            # table_select = table_select.reset_index(drop=True)
             print table_select
-            # print table_select.to_csv(index=False, header=False)
             end = time.time()
             print 'Time: %s seconds' % str(end-start)
 
