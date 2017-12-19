@@ -2,10 +2,8 @@ import pandas as pd
 import json
 import time
 
-# flist = ['business.csv', 'checkin.csv', 'photos.csv', 'review-1m.csv']
-# nlist = ['business', 'checkin', 'photos', 'review-1m']
-flist = ['review-5k.csv', 'review-50k.csv', 'review-500k.csv']
-nlist = ['review-5k', 'review-50k', 'review-500k']
+flist = ['business.csv', 'checkin.csv', 'photos.csv', 'review-1m.csv'， 'review-5k.csv', 'review-50k.csv', 'review-500k.csv']
+nlist = ['business', 'checkin', 'photos', 'review-1m', 'review-5k', 'review-50k', 'review-500k']
 for i in range(len(flist)):
     start = time.time()
 
@@ -29,11 +27,3 @@ for i in range(len(flist)):
 
     end = time.time()
     print end - start
-
-# Test on storing index in memory
-# start = time.time()
-# index = table_index_hash_dict['stars'][5]
-# row_numbers = table_index_row_numbers['stars'][index]
-# print len(row_numbers)
-# end = time.time()
-# print end - start
