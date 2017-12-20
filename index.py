@@ -2,7 +2,7 @@ import pandas as pd
 import json
 import time
 
-flist = ['business.csv', 'checkin.csv', 'photos.csv', 'review-1m.csv'， 'review-5k.csv', 'review-50k.csv', 'review-500k.csv']
+flist = ['business.csv', 'checkin.csv', 'photos.csv', 'review-1m.csv', 'review-5k.csv', 'review-50k.csv', 'review-500k.csv']
 nlist = ['business', 'checkin', 'photos', 'review-1m', 'review-5k', 'review-50k', 'review-500k']
 for i in range(len(flist)):
     start = time.time()
