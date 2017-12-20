@@ -45,17 +45,17 @@ exit
 
   Time: 7.463971138 seconds
 
-4. SELECT review_id, stars, useful FROM review-1m WHERE stars >= 4 AND useful > 20
+4. SELECT review_id, stars, useful FROM review-1m WHERE useful > 20 AND stars >= 4
 
   Time: 0.159142017365 seconds
 
-5. SELECT review_id, stars, useful FROM review-1m WHERE useful > 20 AND stars >= 4 - 1
+5. SELECT review_id, stars, useful FROM review-1m WHERE useful > 20 AND stars >= 4 - 0
 
-  Time: 0.315785884857 seconds
+  Time: 0.0694561004639 seconds
 
 6. SELECT review_id, stars, useful FROM review-1m WHERE useful > 10 AND (useful < 20 OR stars >= 4)
 
-  Time: 0.27635383606 seconds
+  Time: 0.17729306221 seconds
 
 7. SELECT B\__city, B\__state, R\__business_id, R\__stars, R\__useful FROM business B, review-1m R WHERE B\__city LIKE "Champaign" AND B\__state LIKE "IL" AND B\__business_id = R\__business_id
 
