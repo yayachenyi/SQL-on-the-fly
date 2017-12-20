@@ -6,6 +6,7 @@ import itertools
 import ast
 import bisect
 import csv
+import strconv
 import copy
 import sys, time, re
 from multiprocessing import Pool
@@ -72,7 +73,6 @@ def fromParser(command):
         assert len(tbs) == 1, 'No abbreviations for single table'
         abb2table[tbs[0]] = tbs[0]
     table_num = len(query)
-    print abb2table
     return abb2table, table_num
 
 def condsplit(condition):
@@ -147,29 +147,42 @@ def getRowNumbersSingleTable(tables, table, cond):
                 row_numbers += tables[table][1][attr][idx]
     return set(row_numbers)
 
-def getTable(table, row_numbers, test_files, row_references):
+def myeval(s):
+    try:
+        return int(s)
+    except ValueError:
+        pass
+    try:
+        return float(s)
+    except ValueError:
+        return s
+
+def getTable(table, row_numbers, test_files, row_references,flag):
     # Given a table name and a row_numbers list, return a pandas datafram.
-    print table, "Table name"
     start = time.time()
     fo = open(table, "r")
     fo.seek(0)
     csv_header = csv.reader(fo).next()
     pd_li = []
     for keyoffest in row_numbers:
-        #print keyoffest,row_references[table][keyoffest]
         fo.seek(row_references[table][keyoffest])
         pd_li.append(csv.reader(fo).next())
-    fo.close()
-    end = time.time()
-    print 'Time: %s seconds' % str(end-start)
-    #print pd_li
     pdframe = pd.DataFrame(pd_li, columns = csv_header)
-    end = time.time()
-    print 'Time: %s seconds' % str(end-start)
+    if flag != 0:
+        fo.seek(0)
+        name_type = pd.read_csv(table, nrows = 1)
+        i = 0
+        for column in pdframe.columns:
+            if name_type.dtypes[i] == 'object':
+                i+=1
+                continue
+            pdframe[[column]] = pdframe[[column]].astype(name_type.dtypes[i],copy = False, errors = 'ignore')
+            i+=1
+    fo.close()
     return pdframe
     #return test_files[table].loc[row_numbers,]
 
-def singleTableJoin(tables, row_references, abb2table, whereConds, test_files):
+def singleTableJoin(tables, row_references, abb2table, whereConds, test_files, flag):
     table = abb2table.keys()[0]
     if whereConds == []:
         table_init = pd.read_csv(table+'.csv')
@@ -188,12 +201,16 @@ def singleTableJoin(tables, row_references, abb2table, whereConds, test_files):
     if row_numbers == -1:
         table_init = pd.read_csv(table+'.csv')
     else:
-        table_init = getTable(table+'.csv', list(row_numbers), test_files, row_references)
+        # if whereConds[idx:] != []:
+        #     for c in whereConds[idx:]:
+        #         if (' + ' in c.right) or (' - ' in c.right) or (' * ' in c.right) or (' / ' in c.right):
+        #             flag = 1
+        #             break
+        table_init = getTable(table+'.csv', list(row_numbers), test_files, row_references, flag)
     return table_init, whereConds[idx:]
 
-def multiTableJoin(tables, row_references, table_num, abb2table, whereConds, test_files):
+def multiTableJoin(tables, row_references, table_num, abb2table, whereConds, test_files, flag):
     row_numbers = {(abb2table[k]+k):-1 for k in abb2table}
-    print row_numbers,"rwonumbers"
     idx = 0
     for cond in whereConds:
         if cond.type != 'S':
@@ -208,18 +225,20 @@ def multiTableJoin(tables, row_references, table_num, abb2table, whereConds, tes
             else:
                 row_numbers[table_index] = row_numbers[table_index] & getRowNumbersSingleTable(tables, table, cond)
 
+    # if whereConds[idx+table_num-1:] != []:
+    #     for c in whereConds[idx+table_num-1:]:
+    #         if (' + ' in c.right) or (' - ' in c.right) or (' * ' in c.right) or (' / ' in c.right):
+    #             flag = 1
+    #             break
+
     for t in abb2table:
         table = abb2table[t]
         table_index = (abb2table[t]+t)
-        print table_index," table_index"
         if row_numbers[table_index] != -1:
-            row_numbers[table_index] = getTable(table+'.csv', list(row_numbers[table_index]), test_files, row_references)
-            print "not wrong yet"
+            row_numbers[table_index] = getTable(table+'.csv', list(row_numbers[table_index]), test_files, row_references, flag)
             row_numbers[table_index].columns = [t+'__'+i for i in row_numbers[table_index].columns]
-            print "wrong"
 
     for cidx in range(idx, idx+table_num-1):
-        print whereConds[cidx],cidx
         cond = whereConds[cidx]
         table1 = abb2table[cond.left.split('__')[0]]
         table2 = abb2table[cond.right.split('__')[0]]
@@ -246,7 +265,7 @@ def multiTableJoin(tables, row_references, table_num, abb2table, whereConds, tes
                 idx_list = [tables[table2][0][attr2][i] for i in keys]
                 row_numbers[table2_index] = [tables[table2][1][attr2][j] for j in idx_list]
                 row_numbers[table2_index] = [r for sublist in row_numbers[table2_index] for r in sublist]
-                row_numbers[table2_index] = getTable(table2+'.csv', list(row_numbers[table2_index]), test_files, row_references)
+                row_numbers[table2_index] = getTable(table2+'.csv', list(row_numbers[table2_index]), test_files, row_references, flag)
                 row_numbers[table2_index].columns = [cond.right.split('__')[0]+'__'+i for i in row_numbers[table2_index].columns]
                 data1 = row_numbers[table1_index][row_numbers[table1_index][cond.left].isin(list(keys))]
                 data2 = row_numbers[table2_index][row_numbers[table2_index][cond.right].isin(list(keys))]
@@ -261,7 +280,7 @@ def multiTableJoin(tables, row_references, table_num, abb2table, whereConds, tes
                 idx_list = [tables[table1][0][attr1][i] for i in keys]
                 row_numbers[table1_index] = [tables[table1][1][attr1][j] for j in idx_list]
                 row_numbers[table1_index] = [r for sublist in row_numbers[table1_index] for r in sublist]
-                row_numbers[table1_index] = getTable(table1+'.csv', list(row_numbers[table1_index]), test_files, row_references)
+                row_numbers[table1_index] = getTable(table1+'.csv', list(row_numbers[table1_index]), test_files, row_references, flag)
                 row_numbers[table1_index].columns = [cond.left.split('__')[0]+'__'+i for i in row_numbers[table1_index].columns]
                 data1 = row_numbers[table1_index][row_numbers[table1_index][cond.left].isin(list(keys))]
                 data2 = row_numbers[table2_index][row_numbers[table2_index][cond.right].isin(list(keys))]
@@ -274,12 +293,12 @@ def multiTableJoin(tables, row_references, table_num, abb2table, whereConds, tes
                 idx_list = [tables[table1][0][attr1][i] for i in keys]
                 row_numbers[table1_index] = [tables[table1][1][attr1][j] for j in idx_list]
                 row_numbers[table1_index] = [r for sublist in row_numbers[table1_index] for r in sublist]
-                row_numbers[table1_index] = getTable(table1+'.csv', list(row_numbers[table1_index]), test_files, row_references)
+                row_numbers[table1_index] = getTable(table1+'.csv', list(row_numbers[table1_index]), test_files, row_references,flag)
                 row_numbers[table1_index].columns = [cond.left.split('__')[0]+'__'+i for i in row_numbers[table1_index].columns]
                 idx_list = [tables[table2][0][attr2][i] for i in keys]
                 row_numbers[table2_index] = [tables[table2][1][attr2][j] for j in idx_list]
                 row_numbers[table2_index] = [r for sublist in row_numbers[table2_index] for r in sublist]
-                row_numbers[table2_index] = getTable(table2+'.csv', list(row_numbers[table2_index]), test_files, row_references)
+                row_numbers[table2_index] = getTable(table2+'.csv', list(row_numbers[table2_index]), test_files, row_references, flag)
                 row_numbers[table2_index].columns = [cond.right.split('__')[0]+'__'+i for i in row_numbers[table2_index].columns]
                 data1 = row_numbers[table1_index][row_numbers[table1_index][cond.left].isin(list(keys))]
                 data2 = row_numbers[table2_index][row_numbers[table2_index][cond.right].isin(list(keys))]
@@ -309,7 +328,14 @@ def tableFilter(table, leftConds):
     metacond = ' & '.join(metaconds)
     return table[eval(metacond)]
 
-def selectParser(table, command):
+def selectParser(table, command, tables):
+    if type(table) == unicode:
+        test = re.split(r'\s+', command)
+        if (test[0] == 'DISTINCT') & (len(test) == 2):
+            return pd.DataFrame(tables[table][0][test[1]].keys())
+        else:
+            table = pd.read_csv(table+'.csv')
+
     if command == '*':
         return table
     else:
@@ -330,7 +356,7 @@ def main():
     # for f in files:
     #     test_files[f] = pd.read_csv(f)
     # print 'Test files loaded successfully'
-
+    flag = 0
     tables = {}
     row_references = {}
     while True:
@@ -354,19 +380,27 @@ def main():
             # Table dropping
             drop(segments, tables)
             print 'Index dropped successfully!'
+
+        elif segments[0]== 'MODE':
+            flag = int(segments[1])
+
         else:
             commands = generalhandler(line)
             abb2table, table_num = fromParser(commands['FROM'])
             whereConds = whereParser(commands['WHERE'])
             if table_num == 1:
-                table_init, leftConds = singleTableJoin(tables, row_references, abb2table, whereConds, test_files)
+                if whereConds == []:
+                    table_init = abb2table.values()[0]
+                    leftConds = []
+                else:
+                    table_init, leftConds = singleTableJoin(tables, row_references, abb2table, whereConds, test_files, flag)
             else:
-                table_init, leftConds = multiTableJoin(tables, row_references, table_num, abb2table, whereConds, test_files)
+                table_init, leftConds = multiTableJoin(tables, row_references, table_num, abb2table, whereConds, test_files, flag)
             if leftConds == []:
                 table_filter = table_init
             else:
                 table_filter = tableFilter(table_init, leftConds)
-            table_select = selectParser(table_filter, commands['SELECT'])
+            table_select = selectParser(table_filter, commands['SELECT'], tables)
             # table_select = table_select.reset_index(drop=True)
             print table_select
             end = time.time()
