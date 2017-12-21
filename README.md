@@ -2,27 +2,25 @@
 Allow users perform SQL over csv dataset without putting it into SQL database.
 
 ## Run the program:
-1. Put all the .csv files in to the SQL-on-the-file/ folder.
+1. Put all the .csv files in to the SQL-on-the-fly/ folder.
 
-2. Create a new folder index/ and a new folder row_references/.
+2. Modify setup.sh to ensure you choose the correct python2.7 version according to your local environment
 
-3. Change the 'flist' and 'nlist' in index.py to the .csv files you use. Run index.py to create all the index files into the index/ folder.
+3. Make sure you have the newest version of all the Python packages listed in the requirements.txt
+
+4. Change the 'flist' and 'nlist' in index.py to the .csv files you use.
+
+5. Change the 'flist' and 'nlist' in disk.py to the .csv files you use.
+
+6. Run setup.sh to create all supporting and indexing folders/files automatically.
+
 ```
-python index.py
+./setup.sh
 ```
 
-4. Change the 'flist' and 'nlist' in disk.py to the .csv files you use. Run disk.py to create all the row reference files into the row_reference/ folder.
-```
-python disk.py
-```
-
-5. Start the program and load the index files.
+5. Start the program and you don't need to wait for anything.
 ```
 python myproject.py
-USE review-1m
-USE business
-USE checkin
-USE photos
 ```
 
 6. Run the queries. The program will take a query statement and output the result and query time to the console. Some sample queries are listed below.
