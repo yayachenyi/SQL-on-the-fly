@@ -40,6 +40,7 @@ exit
   Time: 0.332295894623 seconds
 
 2. MODE 0 
+
   SELECT DISTINCT stars FROM review-1m
 
   Time: 0.00784993171692 seconds
