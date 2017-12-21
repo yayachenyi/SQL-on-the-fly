@@ -30,6 +30,46 @@ python myproject.py
 exit
 ```
 
+## Query Instruction and Formatting
+### SELECT basics
+
+#### Single table
+Use attribute of the csv file directly inside SELECT and WHERE clasure. For example:
+```
+SELECT review_id, stars, useful FROM review-1m WHERE useful > 20 AND stars >= 4
+```
+#### Multi table
+Use the abbreviation of the Table and the attribute of the csv file along with a '\__' inside the query.
+```
+SELECT B\__city, B\__state, R\__business_id, R\__stars, R\__useful FROM business B, review-1m R WHERE B\__city LIKE "Champaign" AND B\__state LIKE "IL" AND B\__business_id = R\__business_id
+```
+### FROM basics
+#### Single table
+No abbreviation, just the name of the csv file (without '.csv'). For example:
+```
+FROM review-1m
+```
+#### Multi table
+Must include abbreviation after the name of the csv file. For example:
+```
+FROM review-1m R1, review-1m R2
+```
+### WHERE basics
+#### Single table
+No quotation mark on string. For example:
+```
+SELECT review_id, stars, useful FROM review-1m WHERE useful > 20 AND stars >= 4 AND city = Champaign
+```
+#### Multi table
+Join conditions go here. Conditions order matter. Please use your domain knowledge to manipulate the order.
+Attribtue must along with there name. For example:
+```
+WHERE B__city = Urbana
+```
+LIKE operation must be warpped into a quotation mark. For example:
+```
+SELECT B\__city, B\__state, R\__business_id, R\__stars, R\__useful FROM business B, review-1m R WHERE B\__city LIKE "Champaign" AND B\__state LIKE "IL" AND B\__business_id = R\__business_id
+```
 ## Sample queries:
 1. SELECT * FROM photos
 
