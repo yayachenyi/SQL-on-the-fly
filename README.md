@@ -25,7 +25,7 @@ USE checkin
 USE photos
 ```
 
-6. Run the queries. The program will take a query statement and output the result and query time to the console. Some sample queries are listed below. Note that we have two modes in order to boost some query performance. Please run the MODE command before every query in order to get the correct result.
+6. Run the queries. The program will take a query statement and output the result and query time to the console. Some sample queries are listed below.
 
 7. Exit the program.
 ```
@@ -33,49 +33,38 @@ exit
 ```
 
 ## Sample queries:
-1. MODE 0 
-
-  SELECT * FROM photos
+1. SELECT * FROM photos
 
   Time: 0.332295894623 seconds
 
-2. MODE 0 
-  SELECT DISTINCT stars FROM review-1m
+2. SELECT DISTINCT stars FROM review-1m
 
   Time: 0.00784993171692 seconds
 
-3. MODE 0
+3. SELECT DISTINCT stars, useful FROM review-1m
 
-  SELECT review_id, stars, useful FROM review-1m WHERE stars >= 4 AND useful > 20
+  Time: 7.463971138 seconds
+
+4. SELECT review_id, stars, useful FROM review-1m WHERE useful > 20 AND stars >= 4
 
   Time: 0.159142017365 seconds
 
-4. MODE 1 
+5. SELECT review_id, stars, useful FROM review-1m WHERE useful > 20 AND stars >= 4 - 0
 
-  SELECT review_id, stars, useful FROM review-1m WHERE useful > 20 AND stars >= 4 - 1
+  Time: 0.0694561004639 seconds
 
-  Time: 0.315785884857 seconds
+6. SELECT review_id, stars, useful FROM review-1m WHERE useful > 10 AND (useful < 20 OR stars >= 4)
 
-5. MODE 1 
+  Time: 0.17729306221 seconds
 
-  SELECT review_id, stars, useful FROM review-1m WHERE useful > 10 AND (useful < 20 OR stars >= 4)
-
-  Time: 0.27635383606 seconds
-
-6. MODE 0 
-
-  SELECT B\__city, B\__state, R\__business_id, R\__stars, R\__useful FROM business B, review-1m R WHERE B\__city LIKE "Champaign" AND B\__state LIKE "IL" AND B\__business_id = R\__business_id
+7. SELECT B\__city, B\__state, R\__business_id, R\__stars, R\__useful FROM business B, review-1m R WHERE B\__city LIKE "Champaign" AND B\__state LIKE "IL" AND B\__business_id = R\__business_id
 
   Time: 0.251272916794 seconds
 
-7. MODE 0
-
-  SELECT DISTINCT B\__name FROM business B, review-1m R, photos P WHERE B\__city = Champaign AND B\__state = IL AND P\__label = inside AND R\__stars = 5 AND B\__business_id = P\__business_id AND B\__business_id = R\__business_id
+8. SELECT DISTINCT B\__name FROM business B, review-1m R, photos P WHERE B\__city = Champaign AND B\__state = IL AND P\__label = inside AND R\__stars = 5 AND B\__business_id = P\__business_id AND B\__business_id = R\__business_id
 
   Time: 6.03912496567 seconds
 
-  MODE 0
-  
   SELECT DISTINCT B\__name FROM business B, review-1m R, photos P WHERE B\__city = Champaign AND B\__state = IL AND P\__label = inside AND B\__business_id = P\__business_id AND B\__business_id = R\__business_id AND R\__stars = '5'
 
   Time: 0.423269033432 seconds
