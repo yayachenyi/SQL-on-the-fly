@@ -41,7 +41,7 @@ SELECT review_id, stars, useful FROM review-1m WHERE useful > 20 AND stars >= 4
 #### Multi table
 Use the abbreviation of the Table and the attribute of the csv file along with a '\__' inside the query.
 ```
-SELECT B\__city, B\__state, R\__business_id, R\__stars, R\__useful FROM business B, review-1m R WHERE B\__city LIKE "Champaign" AND B\__state LIKE "IL" AND B\__business_id = R\__business_id
+SELECT B__city, B__state, R__business_id, R__stars, R__useful FROM business B, review-1m R WHERE B__city LIKE "Champaign" AND B__state LIKE "IL" AND B__business_id = R__business_id
 ```
 ### FROM basics
 #### Single table
@@ -68,7 +68,7 @@ WHERE B__city = Urbana
 ```
 LIKE operation must be warpped into a quotation mark. For example:
 ```
-SELECT B\__city, B\__state, R\__business_id, R\__stars, R\__useful FROM business B, review-1m R WHERE B\__city LIKE "Champaign" AND B\__state LIKE "IL" AND B\__business_id = R\__business_id
+SELECT B__city, B__state, R__business_id, R__stars, R__useful FROM business B, review-1m R WHERE B__city LIKE "Champaign" AND B__state LIKE "IL" AND B__business_id = R__business_id
 ```
 ## Sample queries:
 1. SELECT * FROM photos
