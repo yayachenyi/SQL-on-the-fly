@@ -70,6 +70,7 @@ LIKE operation must be warpped into a quotation mark. For example:
 ```
 SELECT B__city, B__state, R__business_id, R__stars, R__useful FROM business B, review-1m R WHERE B__city LIKE "Champaign" AND B__state LIKE "IL" AND B__business_id = R__business_id
 ```
+NOTICE: [MODE 0] WHERE conditions in multi table join after the join: Numeric values and string need to be inside the quotation mark. Use [MODE 1] if you don't want to pay attention to the quotation mark. [MODE 0] will be slightly faster than [MODE1] since \[MODE 0\] will not need to tranfer data type.
 ## Sample queries:
 1. SELECT * FROM photos
 
