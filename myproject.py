@@ -83,43 +83,91 @@ def condsplit(condition):
         assert False, 'Wrong conjuction word'
     return ret
 
-def whereParser(command):
+def getIndex(table, attr):
+    dname = 'index/' + table + '_' + attr + '_index_hash_dict'
+    with open(dname, 'r') as f:
+        data = json.load(f)
+    return data
+
+def whereParser(tables, abb2table, table_num, command):
     ret = []
     if command == '':
         return ret
     conds = re.split(r'\s*AND\s*', command)
     for c in conds:
         if c[0] == '(' and c[-1] == ')':
-            ret.append(CompCondition(c[1:-1]))
+            condapps = CompCondition(c[1:-1])
+            ret.append(condapps)
+            for condapp in condapps.conditions:
+                if table_num == 1:
+                    table = abb2table.values()[0]
+                    kname = table + '_' + condapp.left
+                    if kname not in tables:
+                        tables[kname] = getIndex(table, condapp.left)
+                else:
+                    if '__' in condapp.left:
+                        table = abb2table[condapp.left.split('__')[0]]
+                        kname = table + '_' + condapp.left.split('__')[1]
+                        if kname not in tables:
+                            tables[kname] = getIndex(table, condapp.left.split('__')[1])
+                    if '__' in condapp.right:
+                        table = abb2table[condapp.right.split('__')[0]]
+                        kname = table + '_' + condapp.right.split('__')[1]
+                        if kname not in tables:
+                            tables[kname] = getIndex(table, condapp.right.split('__')[1])
         else:
-            ret.append(Condition(c))
+            condapp = Condition(c)
+            ret.append(condapp)
+            if table_num == 1:
+                table = abb2table.values()[0]
+                kname = table + '_' + condapp.left
+                if kname not in tables:
+                    tables[kname] = getIndex(table, condapp.left)
+            else:
+                if '__' in condapp.left:
+                    table = abb2table[condapp.left.split('__')[0]]
+                    kname = table + '_' + condapp.left.split('__')[1]
+                    if kname not in tables:
+                        tables[kname] = getIndex(table, condapp.left.split('__')[1])
+                if '__' in condapp.right:
+                    table = abb2table[condapp.right.split('__')[0]]
+                    kname = table + '_' + condapp.right.split('__')[1]
+                    if kname not in tables:
+                        tables[kname] = getIndex(table, condapp.left.split('__')[1])
     return ret
+
+def getRowNumbers(table, attr):
+    dname = 'disk/' + table + '_' + attr + '_index_row_numbers'
+    with open(dname, 'r') as f:
+        data = json.load(f)
+    return data
 
 def getRowNumbersSingleTable(tables, table, cond):
     key = cond.right
     attr = cond.left
-    keyl = tables[table][0][attr]
+    # keyl = tables[table][0][attr]
+    keyl = tables[table + '_' + attr]
     if cond.op != 'LIKE':
         key = cond.right
         attr = cond.left
         if key in keyl:
             idx = keyl[key]
             if cond.op == '==':
-                row_numbers = tables[table][1][attr][idx]
+                row_numbers = getRowNumbers(table, attr)[idx]
             elif cond.op == '!=':
-                temp = tables[table][1][attr][:idx] + tables[table][1][attr][idx+1:]
+                temp = getRowNumbers(table, attr)[:idx] + getRowNumbers(table, attr)[idx+1:]
                 row_numbers = [item for sublist in temp for item in sublist]
             elif cond.op == '>=':
-                temp = tables[table][1][attr][idx:]
+                temp = getRowNumbers(table, attr)[idx:]
                 row_numbers = [item for sublist in temp for item in sublist]
             elif cond.op == '<=':
-                temp = tables[table][1][attr][:idx+1]
+                temp = getRowNumbers(table, attr)[:idx+1]
                 row_numbers = [item for sublist in temp for item in sublist]
             elif cond.op == '>':
-                temp = tables[table][1][attr][idx+1:]
+                temp = getRowNumbers(table, attr)[idx+1:]
                 row_numbers = [item for sublist in temp for item in sublist]
             elif cond.op == '<':
-                temp = tables[table][1][attr][:idx]
+                temp = getRowNumbers(table, attr)[:idx]
                 row_numbers = [item for sublist in temp for item in sublist]
         else:
             idx = bisect.bisect(keyl.keys(), key)
@@ -128,23 +176,23 @@ def getRowNumbersSingleTable(tables, table, cond):
             elif cond.op == '!=':
                 row_numbers = -1
             elif cond.op == '>=':
-                temp = tables[table][1][attr][idx:]
+                temp = getRowNumbers(table, attr)[idx:]
                 row_numbers = [item for sublist in temp for item in sublist]
             elif cond.op == '<=':
-                temp = tables[table][1][attr][:idx]
+                temp = getRowNumbers(table, attr)[:idx]
                 row_numbers = [item for sublist in temp for item in sublist]
             elif cond.op == '>':
-                temp = tables[table][1][attr][idx:]
+                temp = getRowNumbers(table, attr)[idx:]
                 row_numbers = [item for sublist in temp for item in sublist]
             elif cond.op == '<':
-                temp = tables[table][1][attr][:idx]
+                temp = getRowNumbers(table, attr)[:idx]
                 row_numbers = [item for sublist in temp for item in sublist]
     else:
         row_numbers = []
         for k in keyl:
             if re.match(cond.right[2:-2], k):
                 idx = keyl[k]
-                row_numbers += tables[table][1][attr][idx]
+                row_numbers += getRowNumbers(table, attr)[idx]
     return set(row_numbers)
 
 def myeval(s):
@@ -165,7 +213,7 @@ def getTable(table, row_numbers, test_files, row_references,flag):
     csv_header = csv.reader(fo).next()
     pd_li = []
     for keyoffest in row_numbers:
-        fo.seek(row_references[table][keyoffest])
+        fo.seek(keyoffest)
         pd_li.append(csv.reader(fo).next())
     pdframe = pd.DataFrame(pd_li, columns = csv_header)
     if flag != 0:
@@ -246,8 +294,8 @@ def multiTableJoin(tables, row_references, table_num, abb2table, whereConds, tes
         table2_index = (abb2table[cond.right.split('__')[0]]+cond.right.split('__')[0])
         attr1 = cond.left.split('__')[1]
         attr2 = cond.right.split('__')[1]
-        keys1 = tables[table1][0][attr1].keys()
-        keys2 = tables[table2][0][attr2].keys()
+        keys1 = tables[table1 + '_' + attr1].keys()
+        keys2 = tables[table2 + '_' + attr2].keys()
         keys  = set(keys1) & set(keys2)
 
         if type(row_numbers[table1_index]) != int:
@@ -262,8 +310,9 @@ def multiTableJoin(tables, row_references, table_num, abb2table, whereConds, tes
                 row_numbers[table1_index] = data
                 row_numbers[table2_index] = data
             else:
-                idx_list = [tables[table2][0][attr2][i] for i in keys]
-                row_numbers[table2_index] = [tables[table2][1][attr2][j] for j in idx_list]
+                idx_list = [tables[table2 + '_' + attr2][i] for i in keys]
+                temp = getRowNumbers(table2, attr2)
+                row_numbers[table2_index] = [temp[j] for j in idx_list]
                 row_numbers[table2_index] = [r for sublist in row_numbers[table2_index] for r in sublist]
                 row_numbers[table2_index] = getTable(table2+'.csv', list(row_numbers[table2_index]), test_files, row_references, flag)
                 row_numbers[table2_index].columns = [cond.right.split('__')[0]+'__'+i for i in row_numbers[table2_index].columns]
@@ -277,8 +326,9 @@ def multiTableJoin(tables, row_references, table_num, abb2table, whereConds, tes
         else:
             if type(row_numbers[table2_index]) != int:
                 keys = set(list(row_numbers[table2_index][cond.right])) & keys
-                idx_list = [tables[table1][0][attr1][i] for i in keys]
-                row_numbers[table1_index] = [tables[table1][1][attr1][j] for j in idx_list]
+                idx_list = [tables[table1 + '_' + attr1][i] for i in keys]
+                temp = getRowNumbers(table1, attr1)
+                row_numbers[table1_index] = [temp[j] for j in idx_list]
                 row_numbers[table1_index] = [r for sublist in row_numbers[table1_index] for r in sublist]
                 row_numbers[table1_index] = getTable(table1+'.csv', list(row_numbers[table1_index]), test_files, row_references, flag)
                 row_numbers[table1_index].columns = [cond.left.split('__')[0]+'__'+i for i in row_numbers[table1_index].columns]
@@ -290,13 +340,15 @@ def multiTableJoin(tables, row_references, table_num, abb2table, whereConds, tes
                 row_numbers[table1_index] = data
                 row_numbers[table2_index] = data
             else:
-                idx_list = [tables[table1][0][attr1][i] for i in keys]
-                row_numbers[table1_index] = [tables[table1][1][attr1][j] for j in idx_list]
+                idx_list = [tables[table1 + '_' + attr1][i] for i in keys]
+                temp = getRowNumbers(table1, attr1)
+                row_numbers[table1_index] = [temp[j] for j in idx_list]
                 row_numbers[table1_index] = [r for sublist in row_numbers[table1_index] for r in sublist]
                 row_numbers[table1_index] = getTable(table1+'.csv', list(row_numbers[table1_index]), test_files, row_references,flag)
                 row_numbers[table1_index].columns = [cond.left.split('__')[0]+'__'+i for i in row_numbers[table1_index].columns]
-                idx_list = [tables[table2][0][attr2][i] for i in keys]
-                row_numbers[table2_index] = [tables[table2][1][attr2][j] for j in idx_list]
+                idx_list = [tables[table2 + '_' + attr2][i] for i in keys]
+                temp = getRowNumbers(table2, attr2)
+                row_numbers[table2_index] = [temp[j] for j in idx_list]
                 row_numbers[table2_index] = [r for sublist in row_numbers[table2_index] for r in sublist]
                 row_numbers[table2_index] = getTable(table2+'.csv', list(row_numbers[table2_index]), test_files, row_references, flag)
                 row_numbers[table2_index].columns = [cond.right.split('__')[0]+'__'+i for i in row_numbers[table2_index].columns]
@@ -332,7 +384,10 @@ def selectParser(table, command, tables):
     if type(table) == unicode:
         test = re.split(r'\s+', command)
         if (test[0] == 'DISTINCT') & (len(test) == 2):
-            return pd.DataFrame(tables[table][0][test[1]].keys())
+            dname = 'index/' + table + '_' + test[1] + '_index_hash_dict'
+            with open(dname, 'r') as f:
+                data = json.load(f)
+            return pd.DataFrame(data.keys())
         else:
             table = pd.read_csv(table+'.csv')
 
@@ -387,7 +442,7 @@ def main():
         else:
             commands = generalhandler(line)
             abb2table, table_num = fromParser(commands['FROM'])
-            whereConds = whereParser(commands['WHERE'])
+            whereConds = whereParser(tables, abb2table, table_num, commands['WHERE'])
             if table_num == 1:
                 if whereConds == []:
                     table_init = abb2table.values()[0]
