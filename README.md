@@ -100,36 +100,36 @@ NOTICE: [MODE 0] WHERE conditions in multi table join after the join: Numeric va
 ## Sample queries:
 1. SELECT * FROM photos
 
-  Time: 0.332295894623 seconds
+  Time: 0.359s
 
 2. SELECT DISTINCT stars FROM review-1m
 
-  Time: 0.00784993171692 seconds
+  Time: 0.004s
 
 3. SELECT DISTINCT stars, useful FROM review-1m
 
-  Time: 7.463971138 seconds
+  Time: 7.694s
 
 4. SELECT review_id, stars, useful FROM review-1m WHERE useful > 20 AND stars >= 4
 
-  Time: 0.159142017365 seconds
+  Time: 0.391s
 
 5. SELECT review_id, stars, useful FROM review-1m WHERE useful > 20 AND stars >= 4 - 0
 
-  Time: 0.0694561004639 seconds
+  Time: 0.208s
 
 6. SELECT review_id, stars, useful FROM review-1m WHERE useful > 10 AND (useful < 20 OR stars >= 4)
 
-  Time: 0.17729306221 seconds
+  Time: 0.306s
 
 7. SELECT B\__city, B\__state, R\__business_id, R\__stars, R\__useful FROM business B, review-1m R WHERE B\__city LIKE "Champaign" AND B\__state LIKE "IL" AND B\__business_id = R\__business_id
 
-  Time: 0.251272916794 seconds
+  Time: 0.427s
 
 8. SELECT DISTINCT B\__name FROM business B, review-1m R, photos P WHERE B\__city = Champaign AND B\__state = IL AND P\__label = inside AND R\__stars = 5 AND B\__business_id = P\__business_id AND B\__business_id = R\__business_id
 
-  Time: 6.03912496567 seconds
+  Time: 6.765s
 
   SELECT DISTINCT B\__name FROM business B, review-1m R, photos P WHERE B\__city = Champaign AND B\__state = IL AND P\__label = inside AND B\__business_id = P\__business_id AND B\__business_id = R\__business_id AND R\__stars = '5'
 
-  Time: 0.423269033432 seconds
+  Time: 0.745s
