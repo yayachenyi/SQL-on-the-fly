@@ -75,17 +75,27 @@ NOTICE: [MODE 0] WHERE conditions in multi table join after the join: Numeric va
 ## Demo queries:
 1. SELECT review_id, funny, useful FROM review-1m WHERE funny >= 20 AND useful > 30
 
-2. SELECT review_id, funny, useful FROM review-1m WHERE useful > 50
+  Time: 0.261s
 
-3. SELECT name, city, state FROM business WHERE city = Champaign AND state = IL
+2. SELECT name, city, state FROM business WHERE city = Champaign AND state = IL
 
-4. SELECT B\__name, B\__postal_code, R\__stars, R\__useful FROM business B, review-1m R WHERE B\__name = Sushi Ichiban AND B\__postal_code = 61820 AND B\__business_id = R\__business_id
+  Time: 0.082s
 
-5. SELECT R1\__user_id, R2\__user_id, R1\__stars, R2\__stars FROM review-1m R1, review-1m R2 WHERE R1\__useful > 50 AND R2\__useful > 50 AND R1\__business_id = R2\__business_id AND R1\__stars = '5' AND R2\__stars = '1'
+3. SELECT B\__name, B\__postal_code, R\__stars, R\__useful FROM business B, review-1m R WHERE B\__name = Sushi Ichiban AND B\__postal_code = 61820 AND B\__business_id = R\__business_id
 
-6. SELECT B\__name, B\__city, B\__state, R\__stars, P\__label FROM business B, review-1m R, photos P WHERE B\__city = Champaign AND P\__label = inside AND B\__state = IL AND B\__business_id = P\__business_id AND B\__business_id = R\__business_id AND R\__stars = '5'
+  Time: 0.379s
 
-7. SELECT B\__name, R1\__user_id, R2\__user_id, B\__address FROM business B, review-1m R1, review-1m R2 WHERE R1\__useful > 50 AND R2\__useful > 50 AND B\__business_id = R1\__business_id AND R1\__business_id = R2\__business_id AND R1\__stars = '5' AND R2\__stars = '1'
+4. SELECT R1\__user_id, R2\__user_id, R1\__stars, R2\__stars FROM review-1m R1, review-1m R2 WHERE R1\__useful > 50 AND R2\__useful > 50 AND R1\__business_id = R2\__business_id AND R1\__stars = '5' AND R2\__stars = '1'
+  
+  Time: 0.277s
+
+5. SELECT B\__name, B\__city, B\__state, R\__stars, P\__label FROM business B, review-1m R, photos P WHERE B\__city = Champaign AND P\__label = inside AND B\__state = IL AND B\__business_id = P\__business_id AND B\__business_id = R\__business_id AND R\__stars = '5'
+
+  Time: 0.745s
+
+6. SELECT B\__name, R1\__user_id, R2\__user_id, B\__address FROM business B, review-1m R1, review-1m R2 WHERE R1\__useful > 50 AND R2\__useful > 50 AND B\__business_id = R1\__business_id AND R1\__business_id = R2\__business_id AND R1\__stars = '5' AND R2\__stars = '1'
+
+  Time: 0.444s
 
 ## Sample queries:
 1. SELECT * FROM photos
