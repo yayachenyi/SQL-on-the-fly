@@ -71,6 +71,22 @@ LIKE operation must be warpped into a quotation mark. For example:
 SELECT B__city, B__state, R__business_id, R__stars, R__useful FROM business B, review-1m R WHERE B__city LIKE "Champaign" AND B__state LIKE "IL" AND B__business_id = R__business_id
 ```
 NOTICE: [MODE 0] WHERE conditions in multi table join after the join: Numeric values and string need to be inside the quotation mark. Use [MODE 1] if you don't want to pay attention to the quotation mark. [MODE 0] will be slightly faster than [MODE1] since \[MODE 0\] will not need to tranfer data type.
+
+## Demo queries:
+1. SELECT review_id, funny, useful FROM review-1m WHERE funny >= 20 AND useful > 30
+
+2. SELECT review_id, funny, useful FROM review-1m WHERE useful > 50
+
+3. SELECT name, city, state FROM business WHERE city = Champaign AND state = IL
+
+4. SELECT B\__name, B\__postal_code, R\__stars, R\__useful FROM business B, review-1m R WHERE B\__name = Sushi Ichiban AND B\__postal_code = 61820 AND B\__business_id = R\__business_id
+
+5. SELECT R1\__user_id, R2\__user_id, R1\__stars, R2\__stars FROM review-1m R1, review-1m R2 WHERE R1\__useful > 50 AND R2\__useful > 50 AND R1\__business_id = R2\__business_id AND R1\__stars = '5' AND R2\__stars = '1'
+
+6. SELECT B\__name, B\__city, B\__state, R\__stars, P\__label FROM business B, review-1m R, photos P WHERE B\__city = Champaign AND P\__label = inside AND B\__state = IL AND B\__business_id = P\__business_id AND B\__business_id = R\__business_id AND R\__stars = '5'
+
+7. SELECT B\__name, R1\__user_id, R2\__user_id, B\__address FROM business B, review-1m R1, review-1m R2 WHERE R1\__useful > 50 AND R2\__useful > 50 AND B\__business_id = R1\__business_id AND R1\__business_id = R2\__business_id AND R1\__stars = '5' AND R2\__stars = '1'
+
 ## Sample queries:
 1. SELECT * FROM photos
 
